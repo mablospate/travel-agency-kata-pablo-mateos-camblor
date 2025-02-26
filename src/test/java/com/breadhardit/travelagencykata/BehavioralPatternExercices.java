@@ -1,6 +1,5 @@
 package com.breadhardit.travelagencykata;
 
-import com.breadhardit.travelagencykata.domain.Customer;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
@@ -8,7 +7,6 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 @Slf4j
 public class BehavioralPatternExercices {
@@ -18,84 +16,20 @@ public class BehavioralPatternExercices {
         - Travels with origin and destination in schengen space, requires Passport
         - Travels with origin or destination out of schengen space, requires Visa
      */
-    @Data
-    public static class Travel {
-        public static final List<String> SCHENGEN_COUNTRIES = List.of("Spain","France","Iceland","Italy","Portugal");
-        String id;
-        String name;
-        String origin;
-        String destination;
-        Boolean sameCountryTravel = Boolean.FALSE;
-        Boolean schengenSpaceTravel = Boolean.FALSE;
-        Boolean visaRequiredTravel = Boolean.FALSE;
-        public Travel(String id,String name,String origin,String destination) {
-            if (origin.equals(destination)) this.sameCountryTravel = Boolean.TRUE;
-            else if (SCHENGEN_COUNTRIES.contains(origin) && SCHENGEN_COUNTRIES.contains(destination)) this.schengenSpaceTravel = Boolean.TRUE;
-            else this.visaRequiredTravel = Boolean.TRUE;
-        }
-    }
-    public static void scanVisa() {
-        log.info("Applying visa...");
-    }
-    public static void scanDNI() {
-        log.info("Applying DNI...");
-    }
-    public static void scanPassport() {
-        log.info("Applying Passport");
-    }
+
     @Test
     // When customer buy a new Travel we have to scan the proper documentation
     public void travelAgency() {
         List<Travel> travels = List.of(
-                new Travel(UUID.randomUUID().toString(),"PYRAMIDS TOUR","Spain","EGYPT"),
-                new Travel(UUID.randomUUID().toString(),"LISBOA TOUR","Spain","Portugal"),
-                new Travel(UUID.randomUUID().toString(),"LISBOA TOUR","Portugal","Portugal")
+                travelFactory.createTravel("PYRAMIDS TOUR", "Spain", "EGYPT"),
+                travelFactory.createTravel("LISBOA TOUR", "Spain", "Portugal"),
+                travelFactory.createTravel("LISBOA TOUR", "Portugal", "Portugal")
         );
-        for (Travel travel: travels) {
-            if (travel.visaRequiredTravel) scanVisa();
-            else if (travel.schengenSpaceTravel) scanPassport();
-            else if (travel.sameCountryTravel) scanDNI();
+        for (Travel travel : travels) {
+            travel.scanningStrategy.scan();
         }
     }
-    // Refactor code using the proper structural pattern
 
-
-    /*
-     * When a new employee is enrolled, company sends a greetins e-mail.
-     * A notification service is querying the database every second looking for new employees to notify
-     */
-    @Builder
-    @Data
-    public static class Employee {
-        final String id;
-        final String name;
-        final String email;
-        @Builder.Default
-        Boolean greetingDone = Boolean.FALSE;
-    }
-    public static class EmployeesRepository{
-        private static final ConcurrentHashMap<String,Employee> EMPLOYEES = new ConcurrentHashMap<>();
-        public void addEmployee(Employee employee) {
-            EMPLOYEES.put(employee.getId(),employee);
-        }
-        public List<Employee> getUnnotifiedEmployees() {
-            return EMPLOYEES.values().stream().filter(e -> !e.greetingDone).toList();
-        }
-    }
-    @Value
-    @AllArgsConstructor
-    public static class GreetingsNotificator {
-        EmployeesRepository employeesRepository;
-        @SneakyThrows
-        public void applyNotifications() {
-            while (true) {
-                log.info("Aplying notifications");
-                List<Employee> employeesToNotify = employeesRepository.getUnnotifiedEmployees();
-                employeesToNotify.forEach(e -> {log.info("Notifying {}", e);e.setGreetingDone(Boolean.TRUE);});
-                Thread.sleep(100);
-            }
-        }
-    }
     @Test
     @SneakyThrows
     public void companyTest() {
@@ -107,5 +41,93 @@ public class BehavioralPatternExercices {
         Thread.sleep(200);
         employeesRepository.addEmployee(Employee.builder().id("2").name("Juan").email("pepe@pepemail.com").build());
     }
+
+    interface ScanningStrategy {
+        void scan();
+    }
+
+    @Data
+    public static class Travel {
+        String id;
+        String name;
+        String origin;
+        String destination;
+        ScanningStrategy scanningStrategy;
+
+        public Travel(String id, String name, String origin, String destination, ScanningStrategy scanningStrategy) {
+            this.id = id;
+            this.name = name;
+            this.origin = origin;
+            this.destination = destination;
+            this.scanningStrategy = scanningStrategy;
+        }
+    }
+
+    public static class SameCountryScan implements ScanningStrategy {
+        public void scan() {
+            log.info("Applying DNI...");
+        }
+    }
+
+    public static class SchengenSpaceScan implements ScanningStrategy {
+        public void scan() {
+            log.info("Applying Passport");
+        }
+    }
+
+    public static class VisaRequiredScan implements ScanningStrategy {
+        public void scan() {
+            log.info("Applying visa...");
+        }
+    }
+    // Refactor code using the proper structural pattern
+
+    public static class travelFactory {
+        public static Travel createTravel(String name, String origin, String destination) {
+            final List<String> SCHENGEN_COUNTRIES = List.of("Spain", "France", "Iceland", "Italy", "Portugal");
+            String id = UUID.randomUUID().toString();
+            ScanningStrategy scanningStrategy;
+            if (origin.equals(destination)) {
+                return new Travel(id, "PYRAMIDS TOUR", "Spain", "EGYPT", new SameCountryScan());
+            } else if (SCHENGEN_COUNTRIES.contains(origin) && SCHENGEN_COUNTRIES.contains(destination)) {
+                return new Travel(id, "PYRAMIDS TOUR", "Spain", "EGYPT", new SchengenSpaceScan());
+            } else {
+                return new Travel(id, "PYRAMIDS TOUR", "Spain", "EGYPT", new VisaRequiredScan());
+            }
+        }
+    }
+
+    /*
+     * When a new employee is enrolled, company sends a greetings e-mail.
+     * A notification service is querying the database every second looking for new employees to notify
+     */
+    @Builder
+    @Data
+    public static class Employee {
+        final String id;
+        final String name;
+        final String email;
+        @Builder.Default
+        Boolean greetingDone = Boolean.FALSE;
+    }
+
+    public static class EmployeesRepository {
+        private static final ConcurrentHashMap<String, Employee> EMPLOYEES = new ConcurrentHashMap<>();
+
+        public void addEmployee(Employee employee) {
+            EMPLOYEES.put(employee.getId(), employee);
+            GreetingsNotificator.notify(employee);
+        }
+    }
+
+    @Value
+    @AllArgsConstructor
+    public static class GreetingsNotificator {
+        public static void notify(Employee employee){
+            log.info("Notifying {}", employee);
+            employee.setGreetingDone(Boolean.TRUE);
+        }
+    }
     // Use the proper behavioral pattern to avoid the continuous querying to database
+
 }

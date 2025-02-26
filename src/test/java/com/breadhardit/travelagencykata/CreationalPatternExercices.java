@@ -17,15 +17,48 @@ public class CreationalPatternExercices {
      *   - TRANSFER: It's a withdrawal, bet we need the destination account number
      *   - ANNULMENT: It cancels a movement, so, we need the original movement
      */
-    @Data
-    @Builder
-    public static class Movement {
-        public enum MovementType {DEPOSIT,WITHDRAWAL}
+    public static abstract class Movement {
         String id;
-        MovementType type;
         Long amount;
         String description;
+
+        public Movement(Long amount, String description){
+            this.id = UUID.randomUUID().toString();
+            this.amount = amount;
+            this.description = description;
+        }
+
+        public String getId() {
+            return id;
+        }
+
+        public Long getAmount() {
+            return amount;
+        }
+
+        public String getDescription() {
+            return description;
+        }
     }
+
+    public static class Deposit extends Movement{
+
+        public Deposit(Long amount, String description) {
+            super(amount, description);
+        }
+    }
+
+    public static class Withdrawal extends Movement{
+
+        public Withdrawal(Long amount, String description) {
+            super(amount, description);
+        }
+
+        public Long getAmount() {
+            return -super.getAmount();
+        }
+    }
+
     @Data
     @RequiredArgsConstructor
     public static class Account {
@@ -34,19 +67,15 @@ public class CreationalPatternExercices {
         Long balance = 0L;
         public void addMovement(Movement movement) {
             MOVEMENTS.put(movement.getId(),movement);
-            if (Movement.MovementType.DEPOSIT.equals(movement.getType())) {
-                balance += movement.getAmount();
-            } else {
-                balance -= movement.getAmount();
-            }
+            balance += movement.getAmount();
             log.info("Current balance: {}",balance);
         }
     }
     @Test
     public void test() {
         Account account = new Account(UUID.randomUUID().toString());
-        account.addMovement(Movement.builder().id("1").type(Movement.MovementType.DEPOSIT).amount(1000L).description("INGRESO").build());
-        account.addMovement(Movement.builder().id("1").type(Movement.MovementType.WITHDRAWAL).amount(10L).description("GASTOS VARIOS").build());
+        account.addMovement(new Deposit(1000L, "INGRESO"));
+        account.addMovement(new Withdrawal(10L, "GASTOS VARIOS"));
     }
     /* TODO
         Made the refactor to create new movement types, and avoid scalability issues applying the proper creational pattern.
