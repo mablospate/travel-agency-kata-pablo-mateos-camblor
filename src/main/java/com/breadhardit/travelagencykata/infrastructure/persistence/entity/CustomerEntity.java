@@ -4,6 +4,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 
@@ -13,6 +14,7 @@ import java.time.LocalDate;
 @Table(name = "CUSTOMERS")
 @Data
 @Builder
+@AllArgsConstructor
 public class CustomerEntity {
     @Id
     @Column(name = "ID")
@@ -30,13 +32,7 @@ public class CustomerEntity {
     @Column(name = "ACTIVE")
     Boolean active;
 
-    public CustomerEntity(String id, String name, String surnames, LocalDate birthDate, String passportNumber, LocalDate enrollmentDate, Boolean active) {
-        this.id = id;
-        this.name = name;
-        this.surnames = surnames;
-        this.birthDate = birthDate;
-        this.passportNumber = passportNumber;
-        this.enrollmentDate = enrollmentDate;
-        this.active = active;
+    public CustomerEntity() {
+
     }
 }
