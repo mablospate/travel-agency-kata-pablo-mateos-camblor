@@ -15,4 +15,14 @@ public class Customer {
     String passportNumber;
     LocalDate enrollmentDate;
     Boolean active;
+
+    public Customer(String id, String name, String surnames, LocalDate birthDate, String passportNumber, LocalDate enrollmentDate, Boolean active) {
+        this.id = id;
+        this.name = name;
+        this.surnames = surnames;
+        this.birthDate = birthDate;
+        this.passportNumber = passportNumber;
+        this.enrollmentDate = enrollmentDate;
+        this.active = active;
+    }
 }
