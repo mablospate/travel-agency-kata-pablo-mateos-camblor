@@ -1,4 +1,4 @@
-package com.breadhardit.travelagencykata.application.adapter;
+package com.breadhardit.travelagencykata.infrastructure.persistence.adapter;
 
 import com.breadhardit.travelagencykata.application.port.CustomersRepository;
 import com.breadhardit.travelagencykata.domain.Customer;
