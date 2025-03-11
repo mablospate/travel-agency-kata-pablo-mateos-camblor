@@ -1,3 +1,10 @@
+# Respuesta correspondiente al taller 2
+Alumno que entrega: Pablo Mateos Camblor
+## Principios SOLID utilizados
+### * Open to extension, closed to modification
+### * Single responsibility
+### * Dependency inversion
+```java
 package com.breadhardit.travelagencykata.infrastructure.persistence.adapter;
 
 import com.breadhardit.travelagencykata.application.port.CustomersRepository;
@@ -70,3 +77,44 @@ public class JPAAdapter implements CustomersRepository {
         return adaptedCustomer == null? Optional.empty(): Optional.of(adaptedCustomer);
     }
 }
+```
+## Patrones de diseño identificados en el proyecto
+### Builder
+```java
+@Value
+@Builder
+@AllArgsConstructor
+public class Customer {
+    ...
+}
+```
+### Adapter (implementado por mí, pero el código se prestaba a su implementación)
+```java
+public class JPAAdapter implements CustomersRepository {
+    private CustomersJPARepository jpa;
+    ...
+}
+```
+### Command
+```java
+public class CreateCustomerCommand {
+    String id = UUID.randomUUID().toString();
+    String name;
+    String surnames;
+    LocalDate birthDate;
+    String passportNumber;
+    CustomersRepository customersRepository;
+    @SneakyThrows
+    public String handle() {
+        Customer customer = Customer.builder()
+                .id(id)
+                .name(name)
+                .surnames(surnames)
+                .birthDate(birthDate)
+                .passportNumber(passportNumber)
+                .build();
+        customersRepository.saveCustomer(customer);
+        return customer.getId();
+    }
+}
+```

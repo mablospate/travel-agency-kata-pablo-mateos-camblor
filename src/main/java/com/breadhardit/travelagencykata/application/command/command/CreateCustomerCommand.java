@@ -30,5 +30,4 @@ public class CreateCustomerCommand {
         customersRepository.saveCustomer(customer);
         return customer.getId();
     }
-
 }
