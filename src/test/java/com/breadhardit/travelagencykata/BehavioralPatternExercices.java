@@ -1,69 +1,121 @@
 package com.breadhardit.travelagencykata;
 
-import com.breadhardit.travelagencykata.domain.Customer;
-import lombok.*;
+import lombok.Builder;
+import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
 
 @Slf4j
 public class BehavioralPatternExercices {
-    /* EXERCISE 1
-        Travels has an origin and a destination. Travels have some restrictions:
-        - Travels with origin and destination in the same country require only Identity Document
-        - Travels with origin and destination in schengen space, requires Passport
-        - Travels with origin or destination out of schengen space, requires Visa
-     */
     @Data
     public static class Travel {
-        public static final List<String> SCHENGEN_COUNTRIES = List.of("Spain","France","Iceland","Italy","Portugal");
-        String id;
-        String name;
-        String origin;
-        String destination;
-        Boolean sameCountryTravel = Boolean.FALSE;
-        Boolean schengenSpaceTravel = Boolean.FALSE;
-        Boolean visaRequiredTravel = Boolean.FALSE;
-        public Travel(String id,String name,String origin,String destination) {
-            if (origin.equals(destination)) this.sameCountryTravel = Boolean.TRUE;
-            else if (SCHENGEN_COUNTRIES.contains(origin) && SCHENGEN_COUNTRIES.contains(destination)) this.schengenSpaceTravel = Boolean.TRUE;
-            else this.visaRequiredTravel = Boolean.TRUE;
+        private static final List<String> SCHENGEN_COUNTRIES =
+                List.of("Spain", "France", "Iceland", "Italy", "Portugal");
+
+        private final String id;
+        private final String name;
+        private final String origin;
+        private final String destination;
+
+        public boolean isDomestic() {
+            return origin.equalsIgnoreCase(destination);
+        }
+
+        public boolean isWithinSchengen() {
+            return SCHENGEN_COUNTRIES.stream().anyMatch(origin::equalsIgnoreCase)
+                    && SCHENGEN_COUNTRIES.stream().anyMatch(destination::equalsIgnoreCase);
         }
     }
-    public static void scanVisa() {
+
+    private interface DocumentScanningStrategy {
+        boolean supports(Travel travel);
+
+        void scan();
+    }
+
+    private static final class IdentityDocumentStrategy implements DocumentScanningStrategy {
+        @Override
+        public boolean supports(Travel travel) {
+            return travel.isDomestic();
+        }
+
+        @Override
+        public void scan() {
+            scanDNI();
+        }
+    }
+
+    private static final class PassportStrategy implements DocumentScanningStrategy {
+        @Override
+        public boolean supports(Travel travel) {
+            return travel.isWithinSchengen();
+        }
+
+        @Override
+        public void scan() {
+            scanPassport();
+        }
+    }
+
+    private static final class VisaStrategy implements DocumentScanningStrategy {
+        @Override
+        public boolean supports(Travel travel) {
+            return !travel.isDomestic() && !travel.isWithinSchengen();
+        }
+
+        @Override
+        public void scan() {
+            scanVisa();
+        }
+    }
+
+    private static final class TravelDocumentProcessor {
+        private final List<DocumentScanningStrategy> strategies = List.of(
+                new IdentityDocumentStrategy(),
+                new PassportStrategy(),
+                new VisaStrategy()
+        );
+
+        void scanRequiredDocument(Travel travel) {
+            strategies.stream()
+                    .filter(strategy -> strategy.supports(travel))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalStateException("No document strategy for travel"))
+                    .scan();
+        }
+    }
+
+    private static void scanVisa() {
         log.info("Applying visa...");
     }
-    public static void scanDNI() {
+
+    private static void scanDNI() {
         log.info("Applying DNI...");
     }
-    public static void scanPassport() {
-        log.info("Applying Passport");
+
+    private static void scanPassport() {
+        log.info("Applying passport...");
     }
+
     @Test
-    // When customer buy a new Travel we have to scan the proper documentation
-    public void travelAgency() {
+    void travelAgencyScansTheDocumentRequiredForEachTravel() {
+        TravelDocumentProcessor processor = new TravelDocumentProcessor();
         List<Travel> travels = List.of(
-                new Travel(UUID.randomUUID().toString(),"PYRAMIDS TOUR","Spain","EGYPT"),
-                new Travel(UUID.randomUUID().toString(),"LISBOA TOUR","Spain","Portugal"),
-                new Travel(UUID.randomUUID().toString(),"LISBOA TOUR","Portugal","Portugal")
+                new Travel(UUID.randomUUID().toString(), "PYRAMIDS TOUR", "Spain", "Egypt"),
+                new Travel(UUID.randomUUID().toString(), "LISBOA TOUR", "Spain", "Portugal"),
+                new Travel(UUID.randomUUID().toString(), "LOCAL TOUR", "Portugal", "Portugal")
         );
-        for (Travel travel: travels) {
-            if (travel.visaRequiredTravel) scanVisa();
-            else if (travel.schengenSpaceTravel) scanPassport();
-            else if (travel.sameCountryTravel) scanDNI();
-        }
+
+        travels.forEach(processor::scanRequiredDocument);
     }
-    // Refactor code using the proper structural pattern
 
-
-    /*
-     * When a new employee is enrolled, company sends a greetins e-mail.
-     * A notification service is querying the database every second looking for new employees to notify
-     */
     @Builder
     @Data
     public static class Employee {
@@ -73,39 +125,43 @@ public class BehavioralPatternExercices {
         @Builder.Default
         Boolean greetingDone = Boolean.FALSE;
     }
-    public static class EmployeesRepository{
-        private static final ConcurrentHashMap<String,Employee> EMPLOYEES = new ConcurrentHashMap<>();
-        public void addEmployee(Employee employee) {
-            EMPLOYEES.put(employee.getId(),employee);
+
+    public static class EmployeesRepository {
+        private final ConcurrentHashMap<String, Employee> employees = new ConcurrentHashMap<>();
+        private final CopyOnWriteArrayList<Consumer<Employee>> observers = new CopyOnWriteArrayList<>();
+
+        public void subscribe(Consumer<Employee> observer) {
+            observers.add(observer);
         }
-        public List<Employee> getUnnotifiedEmployees() {
-            return EMPLOYEES.values().stream().filter(e -> !e.greetingDone).toList();
+
+        public void addEmployee(Employee employee) {
+            employees.put(employee.getId(), employee);
+            observers.forEach(observer -> observer.accept(employee));
         }
     }
-    @Value
-    @AllArgsConstructor
-    public static class GreetingsNotificator {
-        EmployeesRepository employeesRepository;
-        @SneakyThrows
-        public void applyNotifications() {
-            while (true) {
-                log.info("Aplying notifications");
-                List<Employee> employeesToNotify = employeesRepository.getUnnotifiedEmployees();
-                employeesToNotify.forEach(e -> {log.info("Notifying {}", e);e.setGreetingDone(Boolean.TRUE);});
-                Thread.sleep(100);
+
+    public static class GreetingsNotificator implements Consumer<Employee> {
+        public GreetingsNotificator(EmployeesRepository employeesRepository) {
+            employeesRepository.subscribe(this);
+        }
+
+        @Override
+        public void accept(Employee employee) {
+            if (!employee.getGreetingDone()) {
+                log.info("Notifying {}", employee);
+                employee.setGreetingDone(Boolean.TRUE);
             }
         }
     }
+
     @Test
-    @SneakyThrows
-    public void companyTest() {
+    void employeeIsNotifiedWhenAddedWithoutPolling() {
         EmployeesRepository employeesRepository = new EmployeesRepository();
-        GreetingsNotificator greetingsNotificator = new GreetingsNotificator(employeesRepository);
-        new Thread(() -> greetingsNotificator.applyNotifications()).start();
-        Thread.sleep(200);
-        employeesRepository.addEmployee(Employee.builder().id("1").name("Pepe").email("pepe@pepemail.com").build());
-        Thread.sleep(200);
-        employeesRepository.addEmployee(Employee.builder().id("2").name("Juan").email("pepe@pepemail.com").build());
+        new GreetingsNotificator(employeesRepository);
+        Employee employee = Employee.builder().id("1").name("Pepe").email("pepe@example.com").build();
+
+        employeesRepository.addEmployee(employee);
+
+        Assertions.assertTrue(employee.getGreetingDone());
     }
-    // Use the proper behavioral pattern to avoid the continuous querying to database
 }

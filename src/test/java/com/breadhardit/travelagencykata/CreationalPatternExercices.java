@@ -1,57 +1,171 @@
 package com.breadhardit.travelagencykata;
 
-import lombok.Builder;
-import lombok.Data;
-import lombok.RequiredArgsConstructor;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 public class CreationalPatternExercices {
-    /*
-     * Banking accounts has movements. And each movement can be a deposit or withdrawal
-     * After a few months operating, we need to create new types of movements:
-     *   - TRANSFER: It's a withdrawal, bet we need the destination account number
-     *   - ANNULMENT: It cancels a movement, so, we need the original movement
-     */
-    @Data
-    @Builder
-    public static class Movement {
-        public enum MovementType {DEPOSIT,WITHDRAWAL}
-        String id;
-        MovementType type;
-        Long amount;
-        String description;
-    }
-    @Data
-    @RequiredArgsConstructor
-    public static class Account {
-        public static final ConcurrentHashMap<String,Movement> MOVEMENTS = new ConcurrentHashMap<>();
-        final String id;
-        Long balance = 0L;
-        public void addMovement(Movement movement) {
-            MOVEMENTS.put(movement.getId(),movement);
-            if (Movement.MovementType.DEPOSIT.equals(movement.getType())) {
-                balance += movement.getAmount();
-            } else {
-                balance -= movement.getAmount();
+    public abstract static class Movement {
+        protected final String id;
+        protected final long amount;
+        protected final String description;
+
+        private Movement(String id, long amount, String description) {
+            if (amount <= 0) {
+                throw new IllegalArgumentException("Movement amount must be positive");
             }
-            log.info("Current balance: {}",balance);
+            this.id = id;
+            this.amount = amount;
+            this.description = description;
+        }
+
+        abstract void apply(Account account);
+
+        abstract void reverse(Account account);
+    }
+
+    private static final class Deposit extends Movement {
+        private Deposit(String id, long amount, String description) {
+            super(id, amount, description);
+        }
+
+        @Override
+        void apply(Account account) {
+            account.credit(amount);
+        }
+
+        @Override
+        void reverse(Account account) {
+            account.debit(amount);
         }
     }
-    @Test
-    public void test() {
-        Account account = new Account(UUID.randomUUID().toString());
-        account.addMovement(Movement.builder().id("1").type(Movement.MovementType.DEPOSIT).amount(1000L).description("INGRESO").build());
-        account.addMovement(Movement.builder().id("1").type(Movement.MovementType.WITHDRAWAL).amount(10L).description("GASTOS VARIOS").build());
+
+    private static final class Withdrawal extends Movement {
+        private Withdrawal(String id, long amount, String description) {
+            super(id, amount, description);
+        }
+
+        @Override
+        void apply(Account account) {
+            account.debit(amount);
+        }
+
+        @Override
+        void reverse(Account account) {
+            account.credit(amount);
+        }
     }
-    /* TODO
-        Made the refactor to create new movement types, and avoid scalability issues applying the proper creational pattern.
-        Remember, our code MUST follow SOLID Principles, so refactor the classes you need to accomplish it
-     */
 
+    private static final class Transfer extends Movement {
+        private final Account destination;
 
+        private Transfer(String id, long amount, String description, Account destination) {
+            super(id, amount, description);
+            this.destination = destination;
+        }
+
+        @Override
+        void apply(Account account) {
+            account.debit(amount);
+            destination.credit(amount);
+        }
+
+        @Override
+        void reverse(Account account) {
+            destination.debit(amount);
+            account.credit(amount);
+        }
+    }
+
+    private static final class Annulment extends Movement {
+        private final Movement originalMovement;
+
+        private Annulment(String id, String description, Movement originalMovement) {
+            super(id, originalMovement.amount, description);
+            this.originalMovement = originalMovement;
+        }
+
+        @Override
+        void apply(Account account) {
+            originalMovement.reverse(account);
+        }
+
+        @Override
+        void reverse(Account account) {
+            originalMovement.apply(account);
+        }
+    }
+
+    public static final class MovementFactory {
+        private MovementFactory() {
+        }
+
+        public static Movement deposit(String id, long amount, String description) {
+            return new Deposit(id, amount, description);
+        }
+
+        public static Movement withdrawal(String id, long amount, String description) {
+            return new Withdrawal(id, amount, description);
+        }
+
+        public static Movement transfer(String id, long amount, String description, Account destination) {
+            return new Transfer(id, amount, description, destination);
+        }
+
+        public static Movement annulment(String id, String description, Movement originalMovement) {
+            return new Annulment(id, description, originalMovement);
+        }
+    }
+
+    @Getter
+    public static final class Account {
+        private final String id;
+        private final Map<String, Movement> movements = new HashMap<>();
+        private long balance;
+
+        public Account(String id) {
+            this.id = id;
+        }
+
+        public void addMovement(Movement movement) {
+            if (movements.containsKey(movement.id)) {
+                throw new IllegalArgumentException("Movement already applied: " + movement.id);
+            }
+            movement.apply(this);
+            movements.put(movement.id, movement);
+            log.info("Movement {} ({}): current balance is {}", movement.id, movement.description, balance);
+        }
+
+        private void credit(long amount) {
+            balance += amount;
+        }
+
+        private void debit(long amount) {
+            if (balance < amount) {
+                throw new IllegalStateException("Insufficient funds in account " + id);
+            }
+            balance -= amount;
+        }
+    }
+
+    @Test
+    void factoryCreatesAllMovementTypesAndAppliesTheirEffects() {
+        Account source = new Account(UUID.randomUUID().toString());
+        Account destination = new Account(UUID.randomUUID().toString());
+
+        source.addMovement(MovementFactory.deposit("deposit", 1000, "Income"));
+        Movement transfer = MovementFactory.transfer("transfer", 300, "Transfer", destination);
+        source.addMovement(transfer);
+        source.addMovement(MovementFactory.withdrawal("withdrawal", 100, "Expenses"));
+        source.addMovement(MovementFactory.annulment("annulment", "Cancel transfer", transfer));
+
+        Assertions.assertEquals(900, source.getBalance());
+        Assertions.assertEquals(0, destination.getBalance());
+    }
 }
